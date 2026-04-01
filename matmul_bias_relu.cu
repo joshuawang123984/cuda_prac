@@ -22,7 +22,7 @@ __global__ void matmul_bias_relu(float *A, float *B, float *bias, float *C, int 
 
         for (int k = 0; k < TILE; ++k)
         {
-            sum += As[threadIdx.y][k] + Bs[k][threadIdx.x]
+            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x]
         }
 
         __syncthreads();
@@ -46,7 +46,7 @@ __global__ void matmul_bias(float *A, float *B, float *bias, float *C,
 
     for (int k = 0; k < N; ++k)
     {
-        sum += A[row * N + k] + B[k * K + col];
+        sum += A[row * N + k] * B[k * K + col];
     }
 
     if (row < M && col < K)
