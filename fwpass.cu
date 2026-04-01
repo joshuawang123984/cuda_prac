@@ -1,9 +1,16 @@
-enum ActivationType = {RELU, NONE};
+#include <cuda_runtime.h>
+#include <cstdlib>
+
+enum ActivationType
+{
+    RELU,
+    NONE
+};
 
 #define TILE 16
 #define WPT 2 // work per thread
 
-__global__ void matmul_register_block(float *A, float *B, float *C, int N)
+__global__ void matmul_register_block(float *A, float *B, float *C, int M, int K, int N)
 {
 
     __shared__ float As[TILE][TILE];
@@ -17,11 +24,11 @@ __global__ void matmul_register_block(float *A, float *B, float *C, int N)
 
     float sum[WPT] = {0.0f, 0.0f}; // registers
 
-    for (int t = 0; t < N; t += TILE)
+    for (int t = 0; t < K; t += TILE)
     {
 
         // Load A tile
-        As[ty][tx] = A[row * N + (t + tx)];
+        As[ty][tx] = A[row * K + (t + tx)];
 
         // Load multiple B values (coalesced)
         for (int w = 0; w < WPT; w++)
@@ -130,7 +137,11 @@ public:
 
     void forward(float *d_input, float *d_output)
     {
-        matmul<<<grid1, block1>>>(
+        dim3 block(TILE, TILE);
+        dim3 grid1((hidden_size + TILE * WPT - 1) / (TILE * WPT),
+                   (1 + TILE - 1) / TILE);
+
+        matmul_register_block<<<grid1, block>>>(
             d_input, d_w1, d_z1,
             1, input_size, hidden_size);
 
@@ -142,7 +153,9 @@ public:
             bias_relu<<<blocks, threads>>>(d_z1, d_b1, hidden_size);
         }
 
-        matmul<<<grid2, block2>>>(
+        dim3 grid2((output_size + TILE * WPT - 1) / (TILE * WPT),
+                   (1 + TILE - 1) / TILE);
+        matmul_register_block<<<grid2, block>>>(
             d_z1, d_w2, d_output,
             1, hidden_size, output_size);
 
